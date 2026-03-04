@@ -15,6 +15,8 @@
   - [Dynamic analysis in this project](#dynamic-analysis-in-this-project)
 - [Dynamic analysis techniques](#dynamic-analysis-techniques)
   - [Testing](#testing)
+  - [Profiling](#profiling)
+  - [Fuzzing](#fuzzing)
 - [Test types](#test-types)
   - [Unit test](#unit-test)
   - [End-to-end test](#end-to-end-test)
@@ -55,11 +57,34 @@ In the editor, [`Pylance`](./python.md#pylance) provides real-time static analys
 
 ### Formatting
 
+<!-- TODO it's code transformation, not just analysis -->
+
+Formatting automatically adjusts code style — indentation, spacing, line length — to enforce a consistent appearance across the codebase. A formatter rewrites files in place without changing behavior.
+
+Examples:
+
+- [`poe format`](./pyproject-toml.md#poe-format) — format all [`Python`](./python.md#what-is-python) files using `ruff`.
+
 ### Linting
+
+Linting analyzes code for potential errors, bad practices, and style violations beyond what [formatting](#formatting) covers. A linter reports problems but does not rewrite code.
+
+Examples:
+
+- [`poe lint`](./pyproject-toml.md#poe-lint) — check [`Python`](./python.md#what-is-python) code for lint errors using `ruff`.
 
 ### Type checking
 
+Type checking verifies that values are used consistently with their declared types — for example, that a function expecting a string is not called with an integer. A type checker reports mismatches without running the code.
+
+Examples:
+
+- [`poe typecheck`](./pyproject-toml.md#poe-typecheck) — run `pyright` and `ty` in sequence.
+- [`Pylance`](./python.md#pylance) — provides real-time type checking in the editor.
+
 ### Model checking
+
+Model checking verifies that a system satisfies a formal specification by systematically exploring all possible states. It is used in safety-critical domains such as hardware design and protocol verification.
 
 ## Dynamic analysis
 
@@ -77,13 +102,25 @@ Dynamic analysis is run with [`poe test`](./pyproject-toml.md#poe-test), which e
 
 ### Testing
 
-<!-- TODO -->
+Testing verifies that code produces expected outputs for given inputs. Each test typically calls a function or sends a request, then uses [assertions](#assertion) to check the result.
 
-<!-- TODO a couple of other techniques -->
+Examples:
+
+- [Testing in `Python`](./python.md#testing)
+
+### Profiling
+
+Profiling measures how much time or memory each part of a program uses while it runs. It helps identify performance bottlenecks — functions that run too often or take too long.
+
+### Fuzzing
+
+Fuzzing feeds random or malformed inputs to a program to find crashes, hangs, or unexpected behavior. It is effective at discovering edge cases that manual [testing](#testing) might miss.
 
 ## Test types
 
-<!-- TODO -->
+<!-- TODO link to environments -->
+
+Tests are grouped by scope — how much of the system each test exercises. Narrower tests run faster and pinpoint failures precisely; broader tests verify that components work together.
 
 ### Unit test
 
