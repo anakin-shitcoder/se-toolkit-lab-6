@@ -2,129 +2,113 @@
 
 ## Overview
 
-Extend the agent from Task 2 with a `query_api` tool to query the deployed backend API. This enables the agent to answer data-dependent questions and system facts.
+Extend the agent from Task 2 with a `query_api` tool to query the backend API. This allows the agent to answer:
+1. **Static system facts** — framework, ports, status codes (from wiki/source code)
+2. **Data-dependent queries** — item count, scores, analytics (from API)
 
 ## Tool Definition: `query_api`
 
-**Purpose:** Call the deployed backend API to query data or check system status.
+**Purpose:** Call the backend API to get data or test endpoints.
 
-**Schema:**
-```json
-{
-  "type": "function",
-  "function": {
-    "name": "query_api",
-    "description": "Call the backend API to query data or check system status. Use this for questions about database contents, API behavior, or system state.",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "method": {
-          "type": "string",
-          "description": "HTTP method (GET, POST, etc.)",
-          "enum": ["GET", "POST", "PUT", "DELETE"]
-        },
-        "path": {
-          "type": "string",
-          "description": "API endpoint path (e.g., '/items/', '/analytics/completion-rate')"
-        },
-        "body": {
-          "type": "string",
-          "description": "JSON request body (optional, for POST/PUT)"
-        }
-      },
-      "required": ["method", "path"]
-    }
-  }
-}
-```
+**Parameters:**
+- `method` (string, required): HTTP method (GET, POST, PUT, DELETE)
+- `path` (string, required): API endpoint path (e.g., `/items/`, `/analytics/completion-rate`)
+- `body` (string, optional): JSON request body for POST/PUT requests
+
+**Returns:** JSON string with `status_code` and `body`.
+
+**Authentication:** Uses `LMS_API_KEY` from environment variables (read from `.env.docker.secret`).
 
 **Implementation:**
-- Use `httpx` for HTTP requests
-- Authenticate with `LMS_API_KEY` from `.env.docker.secret`
-- Return JSON with `status_code` and `body`
-- Handle errors gracefully
-
-## Authentication
-
-**Two API keys:**
-- `LLM_API_KEY` (in `.env.agent.secret`) - authenticates with LLM provider
-- `LMS_API_KEY` (in `.env.docker.secret`) - authenticates with backend API
-
-**Configuration:**
-```python
-LMS_API_KEY = os.getenv("LMS_API_KEY", "")
-AGENT_API_BASE_URL = os.getenv("AGENT_API_BASE_URL", "http://localhost:42002")
-```
-
-## System Prompt Update
-
-Add guidance for when to use each tool:
-
-```
-You have these tools:
-- `read_file`: Read contents of files (source code, docs, configs)
-- `list_files`: List files in a directory  
-- `query_api`: Call the backend API to query data
-
-Tool selection strategy:
-- Wiki/documentation questions → use `list_files` then `read_file`
-- Source code questions → use `read_file` directly
-- Data/system questions → use `query_api`
-- Bug diagnosis → use `query_api` to reproduce error, then `read_file` to find the bug
-```
+- Use `httpx` library for HTTP requests
+- Add `Authorization: Bearer {LMS_API_KEY}` header
+- Timeout: 30 seconds
+- Truncate large responses
 
 ## Environment Variables
+
+The agent must read all configuration from environment variables:
 
 | Variable | Purpose | Source |
 |----------|---------|--------|
 | `LLM_API_KEY` | LLM provider API key | `.env.agent.secret` |
 | `LLM_API_BASE` | LLM API endpoint URL | `.env.agent.secret` |
 | `LLM_MODEL` | Model name | `.env.agent.secret` |
-| `LMS_API_KEY` | Backend API key for `query_api` | `.env.docker.secret` |
-| `AGENT_API_BASE_URL` | Base URL for `query_api` | Optional, defaults to `http://localhost:42002` |
+| `LMS_API_KEY` | Backend API key for `query_api` auth | `.env.docker.secret` |
+| `AGENT_API_BASE_URL` | Base URL for `query_api` (default: `http://localhost:42002`) | Optional, env |
+
+> **Important:** The autochecker runs the agent with different credentials. Never hardcode these values.
+
+## System Prompt Updates
+
+Update the system prompt to instruct the LLM when to use each tool:
+
+- **Wiki questions** → `read_file`, `list_files`
+- **System facts** (framework, ports) → `read_file` on source code
+- **Data queries** (item count, scores) → `query_api`
+- **Bug diagnosis** → `query_api` first to see error, then `read_file` to find the bug
+
+## Implementation Steps
+
+1. **Add `query_api` tool schema** — Register as function-calling schema alongside existing tools
+2. **Implement `query_api` function** — HTTP client with authentication
+3. **Update environment loading** — Read `LMS_API_KEY` and `AGENT_API_BASE_URL`
+4. **Update system prompt** — Explain when to use each tool
+5. **Test with benchmark** — Run `run_eval.py` and iterate
 
 ## Benchmark Questions
 
-The `run_eval.py` script tests 10 questions:
+The local benchmark (`run_eval.py`) tests 10 questions:
 
-| # | Question | Expected Tool | Expected Answer |
-|---|----------|---------------|-----------------|
-| 0 | Wiki: protect branch | `read_file` | branch protection steps |
-| 1 | Wiki: SSH connection | `read_file` | ssh/key steps |
-| 2 | Framework from source | `read_file` | FastAPI |
+| # | Question | Expected Tool | Answer |
+|---|----------|---------------|--------|
+| 0 | Branch protection steps | `read_file` | wiki steps |
+| 1 | SSH connection steps | `read_file` | wiki steps |
+| 2 | Python web framework | `read_file` | FastAPI |
 | 3 | API router modules | `list_files` | items, interactions, analytics, pipeline |
 | 4 | Items in database | `query_api` | number > 0 |
 | 5 | Status code without auth | `query_api` | 401/403 |
 | 6 | Analytics error diagnosis | `query_api`, `read_file` | ZeroDivisionError |
 | 7 | Top-learners bug | `query_api`, `read_file` | TypeError/None |
-| 8 | Request lifecycle | `read_file` | 4+ hops |
+| 8 | Request lifecycle | `read_file` | Caddy → FastAPI → auth → router → ORM → PostgreSQL |
 | 9 | ETL idempotency | `read_file` | external_id check |
+
+## Testing Strategy
+
+Add 2 regression tests to `tests/test_agent.py`:
+
+**Test 1: Framework question**
+- Question: "What Python web framework does the backend use?"
+- Expected: `read_file` in tool_calls
+
+**Test 2: Database count question**
+- Question: "How many items are in the database?"
+- Expected: `query_api` in tool_calls
 
 ## Iteration Strategy
 
-1. Run `run_eval.py` to get baseline score
+1. Run `run_eval.py` to see initial score
 2. For each failing question:
-   - Check stderr logs to see what the agent did
-   - Identify the issue (wrong tool, bad parsing, etc.)
-   - Fix the agent code or system prompt
-   - Re-run to verify
-3. Common fixes:
-   - Tool description too vague → clarify
-   - LLM doesn't call tool → improve prompt
-   - Wrong answer format → adjust system prompt
-   - API auth failing → check LMS_API_KEY
+   - Check which tool was used (or not used)
+   - Improve tool descriptions in schema if LLM doesn't call it
+   - Fix tool implementation if it returns errors
+   - Adjust system prompt for better decision-making
+3. Re-run until all 10 questions pass
 
-## Testing
+## Expected Output Format
 
-**Test cases:**
-1. `"What framework does the backend use?"` → expects `read_file`, answer contains "FastAPI"
-2. `"How many items are in the database?"` → expects `query_api`, answer contains number
+```json
+{
+  "answer": "There are 120 items in the database.",
+  "source": "",
+  "tool_calls": [
+    {"tool": "query_api", "args": {"method": "GET", "path": "/items/"}, "result": "{\"status_code\": 200, \"body\": \"[...]\"}"}
+  ]
+}
+```
 
-## Implementation Steps
+Note: `source` is optional for system questions (may not have a wiki source).
 
-1. Add `query_api` tool schema to `TOOLS` list
-2. Implement `tool_query_api()` function with httpx
-3. Read `LMS_API_KEY` and `AGENT_API_BASE_URL` from environment
-4. Update system prompt with tool selection strategy
-5. Run `run_eval.py` and iterate until all tests pass
-6. Document lessons learned in `AGENT.md`
+## Dependencies
+
+- `httpx` — Already in `pyproject.toml` for HTTP requests
