@@ -1,16 +1,28 @@
-.DS_Store
-.venv
-__pycache__/
-
+# Ignore .secret files
 *.secret
 
-.ruff_cache
-.pytest_cache
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
 
-.direnv
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-.lycheecache
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
 
-tmp
+# Logs
+*.log
 
-**/settings.local.json
+# OS
+.DS_Store
+Thumbs.db
