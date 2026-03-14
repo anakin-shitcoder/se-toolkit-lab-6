@@ -2,104 +2,95 @@
 
 ## Overview
 
-Extend the agent from Task 1 with tools (`read_file`, `list_files`) and an agentic loop that allows the LLM to iteratively explore the wiki and find answers.
+Build an agentic loop that gives the LLM tools to read documentation and navigate the wiki. The agent will:
+1. Receive a question from the user
+2. Send it to the LLM with tool definitions
+3. Execute tool calls if the LLM requests them
+4. Feed results back to the LLM
+5. Repeat until the LLM provides a final answer
+6. Output JSON with `answer`, `source`, and `tool_calls`
 
 ## Tool Definitions
 
 ### `read_file`
 
-**Purpose:** Read contents of a file from the project repository.
+**Purpose:** Read a file from the project repository.
 
-**Schema:**
-```json
-{
-  "name": "read_file",
-  "description": "Read the contents of a file from the project repository",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "path": {
-        "type": "string",
-        "description": "Relative path from project root (e.g., 'wiki/git-workflow.md')"
-      }
-    },
-    "required": ["path"]
-  }
-}
-```
+**Parameters:**
+- `path` (string, required): Relative path from project root (e.g., `wiki/git-workflow.md`)
 
-**Implementation:**
-- Read file using `Path.read_text()`
-- Security: reject paths with `..` traversal
-- Return error message if file doesn't exist
+**Returns:** File contents as a string, or error message if file doesn't exist.
+
+**Security:** Reject paths containing `../` to prevent directory traversal.
 
 ### `list_files`
 
 **Purpose:** List files and directories at a given path.
 
-**Schema:**
-```json
-{
-  "name": "list_files",
-  "description": "List files and directories in a directory",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "path": {
-        "type": "string",
-        "description": "Relative directory path from project root (e.g., 'wiki')"
-      }
-    },
-    "required": ["path"]
-  }
-}
-```
+**Parameters:**
+- `path` (string, required): Relative directory path from project root (e.g., `wiki`)
 
-**Implementation:**
-- Use `Path.iterdir()` to list entries
-- Security: reject paths with `..` traversal
-- Return newline-separated listing
+**Returns:** Newline-separated list of entries.
 
-## Agentic Loop
+**Security:** Reject paths containing `../` and ensure path stays within project root.
+
+## Agentic Loop Design
 
 ```
-1. Send user question + tool schemas to LLM
-2. Parse response:
-   - If tool_calls: execute each tool, append results, go to step 1
-   - If text answer: extract answer + source, output JSON, exit
-3. Max 10 iterations (prevent infinite loops)
+Question → LLM (with tool schemas) → tool_calls?
+                                      │
+                                      yes
+                                      │
+                                      ▼
+                              Execute tools → Append results as "tool" messages
+                                      │
+                                      ▼
+                              Back to LLM (max 10 iterations)
+                                      │
+                                      no (final answer)
+                                      │
+                                      ▼
+                              Extract answer + source → JSON output
 ```
 
-**Message format:**
-```python
-messages = [
-    {"role": "system", "content": system_prompt},
-    {"role": "user", "content": question},
-    # After each tool call:
-    {"role": "assistant", "content": None, "tool_calls": [...]},
-    {"role": "tool", "content": tool_result, "tool_call_id": "..."},
-]
-```
+**Loop constraints:**
+- Maximum 10 tool calls per question
+- Each iteration: LLM response → execute tools → feed back
+- Stop when LLM returns content without tool_calls
 
-## System Prompt
+## System Prompt Strategy
 
-```
-You are a documentation assistant. You have access to tools to read files and list directories.
+The system prompt should instruct the LLM to:
+1. Use `list_files` to discover relevant wiki files
+2. Use `read_file` to read the content and find the answer
+3. Include a source reference in the final answer (file path + section anchor)
+4. Call tools step by step, not all at once
 
-When asked a question:
-1. Use `list_files` to discover relevant files in the wiki/ directory
-2. Use `read_file` to read the contents of relevant files
-3. Find the answer and cite the source (file path + section anchor if applicable)
-4. Return a concise answer with the source reference
+## Implementation Steps
 
-Rules:
-- Always cite your sources (e.g., "wiki/git-workflow.md#resolving-merge-conflicts")
-- If you can't find the answer, say so
-- Use at most 10 tool calls
-- Respond in the same language as the question
-```
+1. **Define tool schemas** — JSON schemas for `read_file` and `list_files` matching OpenAI function-calling format
+2. **Implement tool functions** — Python functions that execute the tools with security checks
+3. **Build the agentic loop** — While loop that:
+   - Calls LLM with messages + tool schemas
+   - Parses tool_calls from response
+   - Executes tools and appends results
+   - Breaks when no tool_calls
+4. **Update response format** — Include `source` field and populate `tool_calls` array
+5. **Update system prompt** — Instruct LLM on tool usage and source citation
 
-## Output Format
+## Testing Strategy
+
+Add 2 regression tests to `tests/test_agent.py`:
+
+**Test 1: Wiki question requiring read_file**
+- Question: "How do you resolve a merge conflict?"
+- Expected: `read_file` in tool_calls, `wiki/git-workflow.md` in source
+
+**Test 2: Directory listing question**
+- Question: "What files are in the wiki?"
+- Expected: `list_files` in tool_calls
+
+## Expected Output Format
 
 ```json
 {
@@ -112,33 +103,12 @@ Rules:
 }
 ```
 
-## Security
+## Security Considerations
 
-**Path traversal prevention:**
-```python
-def is_safe_path(path: str) -> bool:
-    """Reject paths with .. traversal or absolute paths."""
-    if path.startswith("/") or ".." in path:
-        return False
-    return True
-```
-
-## Implementation Steps
-
-1. Define tool schemas as Python dicts
-2. Implement `read_file()` and `list_files()` functions
-3. Update `call_llm_with_retry()` to accept tool schemas
-4. Implement agentic loop in `main()`
-5. Update response format to include `source` field
-6. Add path security validation
-7. Test with wiki questions
-
-## Testing
-
-**Test cases:**
-1. `"How do you resolve a merge conflict?"` → expects `read_file`, source contains `wiki/`
-2. `"What files are in the wiki?"` → expects `list_files`
+- Path traversal prevention: reject `../` in paths
+- Path normalization: use `Path.resolve()` to verify path stays within project root
+- File size limits: truncate large files to avoid token limits
 
 ## Dependencies
 
-No new dependencies needed - using existing `openai` package with function calling support.
+No new dependencies needed — use existing `openai` and `python-dotenv`.

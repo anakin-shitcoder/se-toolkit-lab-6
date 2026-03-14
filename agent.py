@@ -40,6 +40,10 @@ MOCK_MODE = os.getenv("MOCK_MODE", "false").lower() == "true"
 LMS_API_KEY = os.getenv("LMS_API_KEY", "")
 AGENT_API_BASE_URL = os.getenv("AGENT_API_BASE_URL", "http://localhost:42002")
 
+# Backend API configuration (for query_api tool in Task 3)
+LMS_API_KEY = os.getenv("LMS_API_KEY", "")
+AGENT_API_BASE_URL = os.getenv("AGENT_API_BASE_URL", "http://localhost:42002")
+
 # Retry configuration
 MAX_RETRIES = 3
 BASE_DELAY = 1.0  # seconds
@@ -53,6 +57,12 @@ _tool_call_cache: dict[str, Any] = {}
 
 # Project root for file operations
 PROJECT_ROOT = Path(__file__).parent
+
+# Maximum tool calls per question
+MAX_TOOL_CALLS = 10
+
+# Maximum content length to return to LLM (in characters)
+MAX_CONTENT_LENGTH = 8000
 
 
 def log(message: str) -> None:
@@ -88,62 +98,334 @@ def exponential_backoff(attempt: int) -> float:
     return min(delay + jitter, MAX_DELAY)
 
 
-def mock_llm_response(messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def _get_cache_key(tool_name: str, args: dict[str, Any]) -> str:
+    """Generate a cache key for tool results."""
+    args_str = json.dumps(args, sort_keys=True)
+    args_hash = hashlib.md5(args_str.encode()).hexdigest()[:8]
+    return f"{tool_name}:{args_hash}"
+
+
+def _is_safe_path(path: str) -> bool:
+    """Check if path is safe (no directory traversal)."""
+    # Reject paths with ..
+    if ".." in path:
+        return False
+    # Normalize and verify it's within project root
+    try:
+        full_path = (PROJECT_ROOT / path).resolve()
+        return str(full_path).startswith(str(PROJECT_ROOT.resolve()))
+    except (ValueError, OSError):
+        return False
+
+
+# =============================================================================
+# Tool Implementations
+# =============================================================================
+
+def read_file(path: str) -> str:
+    """
+    Read a file from the project repository.
+
+    Args:
+        path: Relative path from project root (e.g., 'wiki/git-workflow.md')
+
+    Returns:
+        File contents as a string, or error message if file doesn't exist.
+    """
+    log(f"Tool: read_file('{path}')")
+
+    # Security check
+    if not _is_safe_path(path):
+        return f"Error: Invalid path '{path}' - directory traversal not allowed"
+
+    file_path = PROJECT_ROOT / path
+
+    if not file_path.exists():
+        return f"Error: File '{path}' does not exist"
+
+    if not file_path.is_file():
+        return f"Error: '{path}' is not a file"
+
+    try:
+        content = file_path.read_text()
+        # Truncate if too large
+        if len(content) > MAX_CONTENT_LENGTH:
+            content = content[:MAX_CONTENT_LENGTH] + "\n... [content truncated]"
+        log(f"read_file: read {len(content)} characters from '{path}'")
+        return content
+    except Exception as e:
+        return f"Error reading file: {e}"
+
+
+def list_files(path: str) -> str:
+    """
+    List files and directories at a given path.
+
+    Args:
+        path: Relative directory path from project root (e.g., 'wiki')
+
+    Returns:
+        Newline-separated list of entries.
+    """
+    log(f"Tool: list_files('{path}')")
+
+    # Security check
+    if not _is_safe_path(path):
+        return f"Error: Invalid path '{path}' - directory traversal not allowed"
+
+    dir_path = PROJECT_ROOT / path
+
+    if not dir_path.exists():
+        return f"Error: Directory '{path}' does not exist"
+
+    if not dir_path.is_dir():
+        return f"Error: '{path}' is not a directory"
+
+    try:
+        entries = sorted(dir_path.iterdir())
+        result = []
+        for entry in entries:
+            # Skip hidden files and common ignored directories
+            if entry.name.startswith(".") and entry.name not in (".env", ".envrc"):
+                continue
+            if entry.name in ("__pycache__", ".venv", ".direnv", "node_modules"):
+                continue
+
+            suffix = "/" if entry.is_dir() else ""
+            result.append(f"{entry.name}{suffix}")
+
+        output = "\n".join(result)
+        log(f"list_files: found {len(result)} entries in '{path}'")
+        return output
+    except Exception as e:
+        return f"Error listing directory: {e}"
+
+
+def query_api(method: str, path: str, body: str | None = None) -> str:
+    """
+    Call the backend API.
+
+    Args:
+        method: HTTP method (GET, POST, etc.)
+        path: API path (e.g., '/items/')
+        body: Optional JSON request body for POST/PUT requests
+
+    Returns:
+        JSON string with status_code and body.
+    """
+    import httpx
+
+    log(f"Tool: query_api('{method}' '{path}')")
+
+    url = f"{AGENT_API_BASE_URL.rstrip('/')}{path}"
+
+    headers = {}
+    if LMS_API_KEY:
+        headers["Authorization"] = f"Bearer {LMS_API_KEY}"
+    headers["Content-Type"] = "application/json"
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            if method.upper() == "GET":
+                response = client.get(url, headers=headers)
+            elif method.upper() == "POST":
+                response = client.post(url, headers=headers, content=body or "{}")
+            elif method.upper() == "PUT":
+                response = client.put(url, headers=headers, content=body or "{}")
+            elif method.upper() == "DELETE":
+                response = client.delete(url, headers=headers)
+            else:
+                return json.dumps({"error": f"Unsupported method: {method}"})
+
+        result = {
+            "status_code": response.status_code,
+            "body": response.text[:MAX_CONTENT_LENGTH],  # Truncate if too large
+        }
+        log(f"query_api: {method} {path} -> {response.status_code}")
+        return json.dumps(result)
+    except Exception as e:
+        log(f"query_api error: {e}")
+        return json.dumps({"error": str(e)})
+
+
+# =============================================================================
+# Tool Schemas for LLM
+# =============================================================================
+
+def get_tool_schemas() -> list[dict[str, Any]]:
+    """Return the list of tool schemas for the LLM."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "description": "Read the contents of a file from the project repository. Use this to read documentation, source code, or configuration files.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Relative path from project root (e.g., 'wiki/git-workflow.md' or 'backend/app/main.py')",
+                        },
+                    },
+                    "required": ["path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_files",
+                "description": "List files and directories at a given path. Use this to discover what files exist in a directory.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Relative directory path from project root (e.g., 'wiki', 'backend', 'backend/app')",
+                        },
+                    },
+                    "required": ["path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "query_api",
+                "description": "Query the backend API to get data or test endpoints. Use this for questions about the running system, database contents, or API behavior.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "method": {
+                            "type": "string",
+                            "description": "HTTP method: GET, POST, PUT, DELETE",
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "API endpoint path (e.g., '/items/', '/analytics/completion-rate')",
+                        },
+                        "body": {
+                            "type": "string",
+                            "description": "Optional JSON request body for POST/PUT requests",
+                        },
+                    },
+                    "required": ["method", "path"],
+                },
+            },
+        },
+    ]
+
+
+def execute_tool(tool_name: str, args: dict[str, Any]) -> str:
+    """
+    Execute a tool by name with the given arguments.
+
+    Args:
+        tool_name: Name of the tool to execute
+        args: Arguments for the tool
+
+    Returns:
+        Tool result as a string
+    """
+    # Check cache first
+    cache_key = _get_cache_key(tool_name, args)
+    if cache_key in _tool_call_cache:
+        log(f"Cache hit for {cache_key}")
+        return _tool_call_cache[cache_key]
+
+    # Execute the tool
+    if tool_name == "read_file":
+        result = read_file(args.get("path", ""))
+    elif tool_name == "list_files":
+        result = list_files(args.get("path", ""))
+    elif tool_name == "query_api":
+        result = query_api(
+            args.get("method", "GET"),
+            args.get("path", ""),
+            args.get("body"),
+        )
+    else:
+        result = f"Error: Unknown tool '{tool_name}'"
+
+    # Cache the result
+    _tool_call_cache[cache_key] = result
+    return result
+
+
+# =============================================================================
+# LLM Interaction
+# =============================================================================
+
+# Track mock call count per question to simulate multi-turn conversation
+_mock_call_counts: dict[str, int] = {}
+
+
+def mock_llm_response(messages: list[dict[str, Any]], tool_schemas: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Generate mock LLM responses for testing without API access.
 
-    Analyzes the question and returns appropriate tool calls or answers.
+    Returns format: {"content": str, "tool_calls": [{"name": str, "args": dict}, ...]}
+    
+    Simulates multi-turn conversation:
+    - First call: return tool call
+    - Second call: return final answer (no tool calls)
     """
+    # Create a key from the last user message to track conversation state
     user_message = ""
-    for msg in messages:
+    for msg in reversed(messages):
         if msg.get("role") == "user":
             user_message = msg.get("content", "").lower()
             break
 
-    # Tool results from previous iterations
-    tool_results = [msg.get("content", "") for msg in messages if msg.get("role") == "tool"]
+    # Track call count for this conversation
+    msg_key = user_message[:50]  # Use first 50 chars as key
+    _mock_call_counts[msg_key] = _mock_call_counts.get(msg_key, 0) + 1
+    call_count = _mock_call_counts[msg_key]
 
     # Pattern matching for common questions
     if "merge conflict" in user_message or "resolve" in user_message:
-        if not tool_results:
+        if call_count == 1:
+            # First call: use read_file tool
             return {
                 "content": "",
                 "tool_calls": [
-                    {
-                        "id": "mock_1",
-                        "name": "list_files",
-                        "arguments": {"path": "wiki"},
-                    }
+                    {"name": "read_file", "args": {"path": "wiki/git-workflow.md"}},
+                ],
+            }
+        else:
+            # Second call: final answer
+            return {
+                "content": "To resolve a merge conflict, edit the conflicting file, choose which changes to keep, then stage and commit.",
+                "tool_calls": [],
+            }
+
+    if "wiki" in user_message and ("files" in user_message or "list" in user_message):
+        if call_count == 1:
+            return {
+                "content": "",
+                "tool_calls": [
+                    {"name": "list_files", "args": {"path": "wiki"}},
                 ],
             }
         else:
             return {
-                "content": "To resolve a merge conflict: 1) Open the conflicting file, 2) Look for conflict markers (<<<<<<, ======, >>>>>>), 3) Edit to keep desired changes, 4) Stage with `git add`, 5) Commit.",
+                "content": "The wiki contains documentation files including git-workflow.md, vm.md, docker.md, and more.",
                 "tool_calls": [],
             }
 
-    if "wiki" in user_message and ("files" in user_message or "in" in user_message):
+    if "rest" in user_message and ("stand" in user_message or "mean" in user_message):
         return {
-            "content": "",
-            "tool_calls": [
-                {
-                    "id": "mock_1",
-                    "name": "list_files",
-                    "arguments": {"path": "wiki"},
-                }
-            ],
+            "content": "REST stands for Representational State Transfer. It is an architectural style for designing networked applications.",
+            "tool_calls": [],
         }
 
-    if "framework" in user_message or "fastapi" in user_message or "web" in user_message:
-        if not tool_results:
+    if "framework" in user_message and ("python" in user_message or "web" in user_message or "backend" in user_message):
+        if call_count == 1:
             return {
                 "content": "",
                 "tool_calls": [
-                    {
-                        "id": "mock_1",
-                        "name": "read_file",
-                        "arguments": {"path": "backend/app/main.py"},
-                    }
+                    {"name": "read_file", "args": {"path": "backend/app/main.py"}},
                 ],
             }
         else:
@@ -152,114 +434,21 @@ def mock_llm_response(messages: list[dict[str, Any]], tools: list[dict[str, Any]
                 "tool_calls": [],
             }
 
-    if "items" in user_message and ("database" in user_message or "many" in user_message or "count" in user_message):
-        return {
-            "content": "",
-            "tool_calls": [
-                {
-                    "id": "mock_1",
-                    "name": "query_api",
-                    "arguments": {"method": "GET", "path": "/items/"},
-                }
-            ],
-        }
-
-    if "rest" in user_message and ("stand" in user_message or "mean" in user_message):
-        return {
-            "content": "REST stands for Representational State Transfer. It is an architectural style for designing networked applications.",
-            "tool_calls": [],
-        }
-
-    if "protect" in user_message and ("branch" in user_message or "github" in user_message):
-        if not tool_results:
+    if "items" in user_message and ("database" in user_message or "count" in user_message or "many" in user_message):
+        if call_count == 1:
             return {
                 "content": "",
                 "tool_calls": [
-                    {
-                        "id": "mock_1",
-                        "name": "read_file",
-                        "arguments": {"path": "wiki/git-workflow.md"},
-                    }
+                    {"name": "query_api", "args": {"method": "GET", "path": "/items/"}},
                 ],
             }
         else:
             return {
-                "content": "To protect a branch on GitHub: go to Settings → Branches → Add branch protection rule → specify branch name → enable protections.",
+                "content": "There are 42 items in the database.",
                 "tool_calls": [],
             }
 
-    if "ssh" in user_message or "connect" in user_message or "vm" in user_message:
-        if not tool_results:
-            return {
-                "content": "",
-                "tool_calls": [
-                    {
-                        "id": "mock_1",
-                        "name": "read_file",
-                        "arguments": {"path": "wiki/vm-setup.md"},
-                    }
-                ],
-            }
-        else:
-            return {
-                "content": "To connect via SSH: 1) Generate SSH key with `ssh-keygen`, 2) Copy public key to VM with `ssh-copy-id`, 3) Connect with `ssh user@vm-ip`.",
-                "tool_calls": [],
-            }
-
-    if "router" in user_message or "api" in user_message or "modules" in user_message:
-        return {
-            "content": "",
-            "tool_calls": [
-                {
-                    "id": "mock_1",
-                    "name": "list_files",
-                    "arguments": {"path": "backend/app/routers"},
-                }
-            ],
-        }
-
-    if "status code" in user_message or "unauthorized" in user_message or "authentication" in user_message:
-        return {
-            "content": "",
-            "tool_calls": [
-                {
-                    "id": "mock_1",
-                    "name": "query_api",
-                    "arguments": {"method": "GET", "path": "/items/"},
-                }
-            ],
-        }
-
-    if "analytics" in user_message and ("error" in user_message or "bug" in user_message):
-        if not tool_results:
-            return {
-                "content": "",
-                "tool_calls": [
-                    {
-                        "id": "mock_1",
-                        "name": "query_api",
-                        "arguments": {"method": "GET", "path": "/analytics/completion-rate?lab=lab-99"},
-                    }
-                ],
-            }
-        elif len(tool_results) == 1:
-            return {
-                "content": "",
-                "tool_calls": [
-                    {
-                        "id": "mock_2",
-                        "name": "read_file",
-                        "arguments": {"path": "backend/app/routers/analytics.py"},
-                    }
-                ],
-            }
-        else:
-            return {
-                "content": "The bug is a ZeroDivisionError - the code divides by zero when there's no data for the lab.",
-                "tool_calls": [],
-            }
-
-    # Default response for unknown questions
+    # Default response - no tool calls
     return {
         "content": "I'll help you with that question. Based on my analysis, I need to gather more information.",
         "tool_calls": [],
@@ -269,7 +458,7 @@ def mock_llm_response(messages: list[dict[str, Any]], tools: list[dict[str, Any]
 def call_llm_with_retry(
     client: OpenAI | None,
     messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]] | None = None,
+    tool_schemas: list[dict[str, Any]] | None = None,
     max_retries: int = MAX_RETRIES,
 ) -> dict[str, Any]:
     """
@@ -281,7 +470,7 @@ def call_llm_with_retry(
     # Mock mode - don't call real API
     if MOCK_MODE:
         log("Mock mode - using simulated LLM responses")
-        return mock_llm_response(messages, tools)
+        return mock_llm_response(messages, tool_schemas or [])
 
     if client is None:
         raise Exception("LLM client not initialized and not in mock mode")
@@ -296,37 +485,36 @@ def call_llm_with_retry(
                 "model": LLM_MODEL,
                 "messages": messages,
                 "temperature": 0.7,
-                "max_tokens": 2048,
+                "max_tokens": 1024,
                 "timeout": 60,
             }
 
-            if tools:
-                kwargs["tools"] = tools
+            if tool_schemas:
+                kwargs["tools"] = tool_schemas
+                kwargs["tool_choice"] = "auto"
 
             response = client.chat.completions.create(**kwargs)
 
-            choice = response.choices[0]
-            message = choice.message
+            msg = response.choices[0].message
+            content = msg.content or ""
+            tool_calls = msg.tool_calls or []
 
-            log("LLM response received")
+            log(f"LLM response received: {len(content)} chars, {len(tool_calls)} tool calls")
 
-            # Extract tool calls if present
-            result: dict[str, Any] = {
-                "content": message.content or "",
-                "tool_calls": [],
-            }
+            # Parse tool calls
+            parsed_tool_calls = []
+            for tc in tool_calls:
+                if tc.function:
+                    try:
+                        args = json.loads(tc.function.arguments)
+                    except json.JSONDecodeError:
+                        args = {}
+                    parsed_tool_calls.append({
+                        "name": tc.function.name,
+                        "args": args,
+                    })
 
-            if hasattr(message, "tool_calls") and message.tool_calls:
-                for tc in message.tool_calls:
-                    result["tool_calls"].append(
-                        {
-                            "id": tc.id,
-                            "name": tc.function.name,
-                            "arguments": json.loads(tc.function.arguments),
-                        }
-                    )
-
-            return result
+            return {"content": content, "tool_calls": parsed_tool_calls}
 
         except Exception as e:
             last_exception = e
@@ -549,20 +737,24 @@ TOOL_FUNCTIONS: dict[str, Any] = {
 
 def create_system_prompt() -> str:
     """Create the system prompt for the agent."""
-    return """You are a helpful lab assistant with access to project files and API.
+    return """You are a helpful assistant that answers questions about a software engineering project.
 
-You have these tools:
-- `read_file`: Read contents of files (source code, docs, configs)
-- `list_files`: List files in a directory
-- `query_api`: Call the backend API to query data
+You have access to three tools:
+1. `read_file` - Read the contents of a file from the project repository
+2. `list_files` - List files and directories at a given path
+3. `query_api` - Query the backend API to get data or test endpoints
 
 When answering questions:
-1. First determine what information you need
-2. Use the appropriate tool(s) to gather information
-3. For wiki/documentation questions, use `list_files` to discover files, then `read_file` to find answers
-4. For data/system questions, use `query_api` to get current data
-5. Always cite your sources (file path + section anchor if applicable)
-6. If you can't find the answer after reasonable exploration, say so
+- Use `list_files` to discover what files exist in a directory
+- Use `read_file` to read documentation, source code, or configuration files
+- Use `query_api` to query the running backend system for data or to test API behavior
+- Think step by step: first discover what files might contain the answer, then read them
+- For wiki/documentation questions, always include a source reference (file path and section if possible)
+- For system/API questions, use `query_api` to get real data from the running system
+- Call tools one at a time, not all at once
+- When you have enough information, provide a final answer without calling more tools
+
+Respond in the same language as the question."""
 
 Rules:
 - Respond in the same language as the question
@@ -570,37 +762,102 @@ Rules:
 - Use at most 10 tool calls total
 - When citing sources, use format: `path/to/file.md#section-anchor`"""
 
-
-def extract_source_from_tool_calls(tool_calls: list[dict[str, Any]]) -> str:
+def run_agentic_loop(
+    client: OpenAI | None,
+    question: str,
+    tool_schemas: list[dict[str, Any]],
+) -> dict[str, Any]:
     """
-    Extract a source reference from tool calls.
+    Run the agentic loop: LLM → tool calls → execute → feed back → repeat.
 
-    Looks for read_file calls and tries to find relevant sections.
+    Args:
+        client: OpenAI client (or None in mock mode)
+        question: User's question
+        tool_schemas: Tool schemas for the LLM
+
+    Returns:
+        Final response with answer, source, and tool_calls
     """
-    for call in tool_calls:
-        if call.get("tool") == "read_file":
-            path = call.get("args", {}).get("path", "")
-            result = call.get("result", "")
+    # Initialize messages with system prompt
+    system_prompt = create_system_prompt()
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": question},
+    ]
 
-            # Try to find a section heading in the content
-            if result and not result.startswith("Error"):
-                lines = result.split("\n")
-                for i, line in enumerate(lines):
-                    if line.startswith("#") or line.startswith("##"):
-                        # Found a heading - create anchor
-                        anchor = line.lower().replace(" ", "-").replace("#", "").strip()
-                        # Check if this section seems relevant (has content after it)
-                        if i + 1 < len(lines) and lines[i + 1].strip():
-                            return f"{path}#{anchor}"
+    all_tool_calls: list[dict[str, Any]] = []
+    final_answer = ""
+    final_source = ""
 
-                # No section found, just return path
-                if path:
-                    return path
+    # Agentic loop
+    for iteration in range(MAX_TOOL_CALLS + 1):
+        log(f"Agentic loop iteration {iteration + 1}/{MAX_TOOL_CALLS + 1}")
 
-    return ""
+        # Call LLM
+        result = call_llm_with_retry(client, messages, tool_schemas)
+        content = result.get("content", "")
+        tool_calls = result.get("tool_calls", [])
+
+        # If no tool calls, we have the final answer
+        if not tool_calls:
+            final_answer = content
+            log("No tool calls - final answer received")
+            break
+
+        # Execute tool calls
+        for tc in tool_calls:
+            tool_name = tc.get("name", "")
+            args = tc.get("args", {})
+
+            # Execute and get result
+            tool_result = execute_tool(tool_name, args)
+
+            # Record the tool call
+            all_tool_calls.append({
+                "tool": tool_name,
+                "args": args,
+                "result": tool_result,
+            })
+
+            # Append tool result to messages
+            messages.append({
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{
+                    "id": f"call_{tool_name}_{len(all_tool_calls)}",
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "arguments": json.dumps(args),
+                    },
+                }],
+            })
+
+            messages.append({
+                "role": "tool",
+                "tool_call_id": f"call_{tool_name}_{len(all_tool_calls)}",
+                "content": tool_result,
+            })
+
+        log(f"Executed {len(tool_calls)} tool calls, total: {len(all_tool_calls)}")
+
+    # Extract source from answer if present
+    # The LLM may include a source reference in the content
+    # For now, we'll leave it empty and let the LLM include it in the answer
+    # Advanced: parse the answer to extract source
+
+    return {
+        "answer": final_answer,
+        "source": final_source,
+        "tool_calls": all_tool_calls,
+    }
 
 
-def create_agent_response(answer: str, tool_calls: list[dict[str, Any]], source: str = "") -> dict[str, Any]:
+# =============================================================================
+# Response Formatting
+# =============================================================================
+
+def create_agent_response(answer: str, source: str = "", tool_calls: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """
     Create the structured JSON response.
 
@@ -608,7 +865,8 @@ def create_agent_response(answer: str, tool_calls: list[dict[str, Any]], source:
     """
     response = {
         "answer": answer,
-        "tool_calls": tool_calls,
+        "source": source,
+        "tool_calls": tool_calls or [],
     }
 
     if source:
@@ -728,6 +986,10 @@ def run_agentic_loop(client: OpenAI, question: str) -> dict[str, Any]:
     return create_agent_response(response["content"] or "Unable to complete the task within the tool call limit.", all_tool_calls, source)
 
 
+# =============================================================================
+# Main Entry Point
+# =============================================================================
+
 def main() -> int:
     """Main entry point."""
     # Mock mode - skip API key validation
@@ -735,21 +997,19 @@ def main() -> int:
         # Validate configuration
         if not LLM_API_KEY or LLM_API_KEY == "your-llm-api-key-here":
             log("Error: LLM_API_KEY not configured in .env.agent.secret")
-            print(json.dumps({"error": "LLM API key not configured", "answer": "", "tool_calls": []}), file=sys.stdout)
+            print(json.dumps({"error": "LLM API key not configured", "answer": "", "source": "", "tool_calls": []}), file=sys.stdout)
             return 1
 
-        if not LLM_API_BASE or LLM_API_BASE == "http://<your-vm-ip>:<qwen-api-port>/v1":
-            # Check if it's the default localhost pattern (might be ok for local testing)
-            if "10.93.26.81" not in LLM_API_BASE and "localhost" not in LLM_API_BASE and "127.0.0.1" not in LLM_API_BASE:
-                log("Error: LLM_API_BASE not configured in .env.agent.secret")
-                print(json.dumps({"error": "LLM API base not configured", "answer": "", "tool_calls": []}), file=sys.stdout)
-                return 1
+        if not LLM_API_BASE or LLM_API_BASE == "your-api-base-here":
+            log("Error: LLM_API_BASE not configured in .env.agent.secret")
+            print(json.dumps({"error": "LLM API base not configured", "answer": "", "source": "", "tool_calls": []}), file=sys.stdout)
+            return 1
 
     # Parse command line arguments
     if len(sys.argv) < 2:
         log("Error: No question provided")
         print(
-            json.dumps({"error": "No question provided. Usage: agent.py \"question\"", "answer": "", "tool_calls": []}),
+            json.dumps({"error": "No question provided. Usage: agent.py \"question\"", "answer": "", "source": "", "tool_calls": []}),
             file=sys.stdout,
         )
         return 1
@@ -765,11 +1025,19 @@ def main() -> int:
             base_url=LLM_API_BASE,
         )
 
+    # Get tool schemas
+    tool_schemas = get_tool_schemas()
+
     try:
         # Run agentic loop
-        response = run_agentic_loop(client, question)
+        result = run_agentic_loop(client, question, tool_schemas)
 
-        # Output response
+        # Create and output response
+        response = create_agent_response(
+            result["answer"],
+            result.get("source", ""),
+            result["tool_calls"],
+        )
         print(json.dumps(response))
 
         log("Response sent successfully")
@@ -777,7 +1045,7 @@ def main() -> int:
 
     except Exception as e:
         log(f"Fatal error: {e}")
-        print(json.dumps({"error": str(e), "answer": "", "tool_calls": []}), file=sys.stdout)
+        print(json.dumps({"error": str(e), "answer": "", "source": "", "tool_calls": []}), file=sys.stdout)
         return 1
 
 
