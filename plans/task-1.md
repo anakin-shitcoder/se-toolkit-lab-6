@@ -2,14 +2,15 @@
 
 ## LLM Provider Selection
 
-**Provider:** OpenRouter API
-**Model:** `qwen/qwen3-next-80b-a3b-instruct:free`
+**Provider:** Qwen Code API (remote)
+**Model:** `qwen3-coder-plus`
 
 **Why this choice:**
-- Free tier available (8 requests/minute)
+- 1000 free requests per day (sufficient for development and testing)
+- Works from Russia without restrictions
 - No credit card required
-- OpenAI-compatible API
-- Good for development and testing
+- Strong tool calling capabilities (needed for future tasks)
+- OpenAI-compatible API (easy integration with `openai` Python package)
 
 ## Architecture
 
@@ -29,7 +30,8 @@ Command line argument → agent.py → LLM API → JSON response → stdout
 
 2. **LLM Client**
    - Use `openai` Python package (OpenAI-compatible API)
-   - Configure custom `base_url` for OpenRouter endpoint
+   - Configure custom `base_url` for Qwen Code endpoint
+   - Simple chat completion call with system prompt
 
 3. **Response parsing**
    - Extract answer from LLM response
@@ -50,7 +52,7 @@ Respond in the same language as the question.
 
 ## Implementation Steps
 
-1. Create `.env.agent.secret` with OpenRouter API key
+1. Create `.env.agent.secret` with actual credentials
 2. Install dependencies (`openai`, `python-dotenv`) via `pyproject.toml`
 3. Create `agent.py` with:
    - Argument parsing (`sys.argv`)
@@ -63,7 +65,7 @@ Respond in the same language as the question.
 
 ## Testing Strategy
 
-**Test file:** `tests/test_agent.py`
+**Test file:** `tests/test_task1.py`
 
 Test will:
 - Run `agent.py "What does REST stand for?"` as subprocess
