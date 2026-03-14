@@ -3,8 +3,8 @@
 <h2>Table of contents</h2>
 
 - [What is `Qwen Code`](#what-is-qwen-code)
-- [Set up the `Qwen Code` (local machine)](#set-up-the-qwen-code-local-machine)
-  - [Set up the `Qwen Code` CLI (local machine)](#set-up-the-qwen-code-cli-local-machine)
+- [Set up the `Qwen Code` (LOCAL)](#set-up-the-qwen-code-local)
+  - [Set up the `Qwen Code` CLI (LOCAL)](#set-up-the-qwen-code-cli-local)
   - [Set up the `Qwen Code Companion` extension for `VS Code`](#set-up-the-qwen-code-companion-extension-for-vs-code)
   - [Set up the `GitHub Copilot Chat` extension for `VS Code`](#set-up-the-github-copilot-chat-extension-for-vs-code)
 - [Check the `Qwen Code` credentials file](#check-the-qwen-code-credentials-file)
@@ -35,17 +35,18 @@
 
 See:
 
-- [Set up the `Qwen Code` (local machine)](#set-up-the-qwen-code-local-machine).
-- [Set up the `Qwen Code` (remote machine)](#set-up-the-qwen-code-remote-machine).
+- [Set up the `Qwen Code` (LOCAL)](#set-up-the-qwen-code-local).
+- [Set up the `Qwen Code` CLI (REMOTE)](#set-up-the-qwen-code-cli-remote).
+- [Set up the `Qwen Code` API (REMOTE)](#set-up-the-qwen-code-api-remote).
 
-## Set up the `Qwen Code` (local machine)
+## Set up the `Qwen Code` (LOCAL)
 
 <!-- no toc -->
-- Method 1: [Set up the `Qwen Code` CLI (local machine)](#set-up-the-qwen-code-cli-local-machine).
+- Method 1: [Set up the `Qwen Code` CLI (LOCAL)](#set-up-the-qwen-code-cli-local).
 - Method 2: [Set up the `Qwen Code Companion` extension for `VS Code`](#set-up-the-qwen-code-companion-extension-for-vs-code).
 - Method 3: [Set up the `GitHub Copilot Chat` extension for `VS Code`](#set-up-the-github-copilot-chat-extension-for-vs-code).
 
-### Set up the `Qwen Code` CLI (local machine)
+### Set up the `Qwen Code` CLI (LOCAL)
 
 > [!NOTE]
 > See [CLI](./cli.md#what-is-a-cli)
@@ -126,9 +127,11 @@ The file must be non-empty.
 
 1. [Connect to the VM](./ssh.md#connect-to-the-vm).
 
-2. [Install `pnpm`](./nodejs.md#install-pnpm).
+2. [Install `Node.js`](./nodejs.md#install-nodejs).
 
-3. To install [`Qwen Code`](#what-is-qwen-code),
+3. [Install `pnpm`](./nodejs.md#install-pnpm).
+
+4. To install [`Qwen Code`](#what-is-qwen-code),
 
    [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
 
@@ -136,13 +139,13 @@ The file must be non-empty.
    pnpm add -g @qwen-code/qwen-code
    ```
 
-4. [Open a chat with `Qwen Code` using the CLI](#open-a-chat-with-qwen-code-using-the-cli).
+5. [Open a chat with `Qwen Code` using the CLI](#open-a-chat-with-qwen-code-using-the-cli).
 
-5. Write `/auth` in the chat to [authenticate via Qwen OAuth](https://github.com/QwenLM/qwen-code?tab=readme-ov-file#authentication).
+6. Write `/auth` in the chat to [authenticate via Qwen OAuth](https://github.com/QwenLM/qwen-code?tab=readme-ov-file#authentication).
 
-6. Open the link in a browser to complete the authentication procedure.
+7. Open the link in a browser to complete the authentication procedure.
 
-7. [Quit the chat with `Qwen Code`](#quit-the-chat-with-qwen-code).
+8. [Quit the chat with `Qwen Code`](#quit-the-chat-with-qwen-code).
 
 ## Set up the `Qwen Code` API (REMOTE)
 
@@ -195,7 +198,7 @@ The file must be non-empty.
 
 7. Save the file (`Ctrl + O`).
 
-8. To start the `Qwen` API,
+8. To start the `Qwen Code` API,
 
    [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
 

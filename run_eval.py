@@ -30,6 +30,39 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import TypedDict
+
+
+class MatchRule(TypedDict, total=False):
+    contains: str
+    contains_all: list[str]
+    any_of: list[str]
+    regex: str
+    numeric_gt: float
+    numeric_range: tuple[float, float]
+
+
+class _QuestionRequired(TypedDict):
+    question: str
+    total: int
+
+
+class Question(_QuestionRequired, total=False):
+    expected: MatchRule
+    expected_source: MatchRule
+    feedback: str
+    has_rubric: bool
+    check_tools: list[str]
+
+
+class ToolCall(TypedDict):
+    tool: str
+
+
+class AgentOutput(TypedDict, total=False):
+    answer: str
+    source: str
+    tool_calls: list[ToolCall]
 
 
 def _load_env():
@@ -72,7 +105,7 @@ def _basic_auth_header(email: str, password: str) -> str:
     return f"Basic {encoded}"
 
 
-def _fetch_question(api_url: str, auth: str, lab: str, index: int):
+def _fetch_question(api_url: str, auth: str, lab: str, index: int) -> Question | None:
     """Fetch a question from the autochecker API. Returns dict or None on 404."""
     import urllib.request
     import urllib.error
@@ -93,7 +126,7 @@ def _fetch_question(api_url: str, auth: str, lab: str, index: int):
         sys.exit(1)
 
 
-def _run_agent(question: str, timeout: int = 60):
+def _run_agent(question: str, timeout: int = 60) -> tuple[AgentOutput, None] | tuple[None, str]:
     """Run agent.py with the question. Returns (answer_dict, error_msg)."""
     try:
         result = subprocess.run(
@@ -130,7 +163,7 @@ def _run_agent(question: str, timeout: int = 60):
 # Matching logic (mirrors autochecker evaluation)
 # ---------------------------------------------------------------------------
 
-def _match(text: str, rule: dict) -> bool:
+def _match(text: str, rule: MatchRule) -> bool:
     """Check if text satisfies the matching rule."""
     text_lower = text.lower()
 
@@ -158,7 +191,7 @@ def _match(text: str, rule: dict) -> bool:
     return False
 
 
-def _format_expected(expected: dict) -> str:
+def _format_expected(expected: MatchRule) -> str:
     """Human-readable description of the expected match."""
     if "contains" in expected:
         return f"answer should contain: \"{expected['contains']}\""
@@ -188,7 +221,7 @@ RESET = "\033[0m"
 LAB = "lab-06"
 
 
-def _check_question(q: dict, data: dict) -> tuple[bool, str]:
+def _check_question(q: Question, data: AgentOutput) -> tuple[bool, str]:
     """Check agent output against question expectations.
 
     Returns (passed, failure_reason). failure_reason is empty on pass.
@@ -228,7 +261,7 @@ def _check_question(q: dict, data: dict) -> tuple[bool, str]:
     check_tools = q.get("check_tools")
     if check_tools:
         tool_calls = data.get("tool_calls", [])
-        tools_used = {tc.get("tool") for tc in tool_calls} if tool_calls else set()
+        tools_used: set[str] = {tc["tool"] for tc in tool_calls} if tool_calls else set()
         missing = set(check_tools) - tools_used
         if missing:
             return False, (
@@ -267,6 +300,7 @@ def main():
             print(f"  {RED}Error: {error}{RESET}")
             sys.exit(1)
 
+        assert data is not None
         passed, reason = _check_question(q, data)
         answer = data.get("answer", "")
         source = data.get("source", "")
@@ -276,7 +310,7 @@ def main():
         if source:
             print(f"  Source: {source}")
         if tool_calls:
-            tools_used = [tc.get("tool", "?") for tc in tool_calls]
+            tools_used = [tc["tool"] for tc in tool_calls]
             print(f"  Tools: {', '.join(tools_used)}")
 
         if passed:
@@ -315,6 +349,7 @@ def main():
             print(f"\n{BOLD}{passed}/{total} passed{RESET}")
             sys.exit(1)
 
+        assert data is not None
         ok, reason = _check_question(q, data)
 
         if ok:

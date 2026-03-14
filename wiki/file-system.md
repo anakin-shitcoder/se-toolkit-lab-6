@@ -7,6 +7,7 @@
   - [File name](#file-name)
   - [Extension](#extension)
   - [Location](#location)
+  - [File path](#file-path)
 - [Directory](#directory)
   - [Subdirectory](#subdirectory)
 - [Path](#path)
@@ -21,7 +22,7 @@
 - [Placeholders](#placeholders)
   - [`<directory-path>` placeholder](#directory-path-placeholder)
   - [`<file-path>` placeholder](#file-path-placeholder)
-  - [`<path>` placeholder](#path-placeholder)
+  - [`<fd-path>` placeholder](#fd-path-placeholder)
 
 ## What is a file system
 
@@ -56,6 +57,10 @@ Example: `README.md` has the extension `.md`.
 The location of a file is its containing [directory](#directory).
 
 Example: for the file `/home/user/project/README.md`, the location is `/home/user/project/`.
+
+### File path
+
+The [path](#path) of a [file](#file).
 
 ## Directory
 
@@ -135,7 +140,7 @@ The `Desktop` directory is the folder that corresponds to the desktop on your sc
 <!-- no toc -->
 - [`<directory-path>` placeholder](#directory-path-placeholder)
 - [`<file-path>` placeholder](#file-path-placeholder)
-- [`<path>` placeholder](#path-placeholder)
+- [`<fd-path>` placeholder](#fd-path-placeholder)
 
 ### `<directory-path>` placeholder
 
@@ -155,6 +160,6 @@ Examples:
 - `../README.md` ([relative path](#relative-path))
 - `~/.ssh/config` ([absolute path](#absolute-path))
 
-### `<path>` placeholder
+### `<fd-path>` placeholder
 
 The [`<file-path>`](#file-path-placeholder) or the [`<directory-path>`](#directory-path-placeholder).

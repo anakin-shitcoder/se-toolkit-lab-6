@@ -702,10 +702,10 @@ Method 2 (file at the absolute [`<file-path>`](./file-system.md#file-path-placeh
 2. Run in the terminal
 
    ```terminal
-   code <path>
+   code <fd-path>
    ```
 
-   See [`<path>`](./file-system.md#file-path).
+   See [`<fd-path>`](./file-system.md#file-path).
 
    **Note:** the file or the directory will be created if it doesn't yet exist.
 

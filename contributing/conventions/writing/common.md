@@ -338,27 +338,27 @@ Good: `` Open <pgadmin-url> in a browser. ``
 
 When defining a placeholder, clarify that the value does not include `<` and `>` wherever it may not be obvious to the reader. Use the format: ``(without `<` and `>`)`` at the end of the description sentence.
 
-When asking students to replace placeholders, don't repeat inline what the placeholder means if it already links to a section that explains it — the link is enough.
+When asking students to replace placeholders, include the word "placeholder" explicitly after the placeholder name. Don't repeat inline what the placeholder means if it already links to a section that explains it — the link is enough.
 
 **Multiple placeholders — bullet list:**
 
 ~~~markdown
 Replace:
 
-- [`<placeholder-1>`](link-to-explanation)
-- [`<placeholder-2>`](link-to-explanation)
+- [`<placeholder-1>` placeholder](link-to-explanation)
+- [`<placeholder-2>` placeholder](link-to-explanation)
 ~~~
 
 **Single placeholder (linked):**
 
 ~~~markdown
-Replace [`<placeholder>`](link-to-explanation).
+Replace [`<placeholder>` placeholder](link-to-explanation).
 ~~~
 
 **Single placeholder (not linked):**
 
 ~~~markdown
-Replace `<placeholder>` with <explanation>.
+Replace `<placeholder>` placeholder with <explanation>.
 ~~~
 
 ## 4.21. `docker compose up` commands
