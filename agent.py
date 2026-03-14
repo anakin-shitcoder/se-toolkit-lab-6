@@ -754,13 +754,14 @@ When answering questions:
 - Call tools one at a time, not all at once
 - When you have enough information, provide a final answer without calling more tools
 
-Respond in the same language as the question."""
+Respond in the same language as the question.
 
 Rules:
 - Respond in the same language as the question
 - Be concise but thorough
 - Use at most 10 tool calls total
-- When citing sources, use format: `path/to/file.md#section-anchor`"""
+- When citing sources, use format: `path/to/file.md#section-anchor`
+"""
 
 def run_agentic_loop(
     client: OpenAI | None,
