@@ -179,7 +179,7 @@ These commands run programs:
 - `pwd` - show current directory.
 - `ls` - list files.
 - `cd <dir>` - go to a directory.
-- `cat <file-path>` - print the content of a file at the [`<file-path>`](./file-system.md#file-path).
+- `cat <file-path>` - print the content of a file at the [`<file-path>`](./file-system.md#file-path-placeholder).
 
 ### Check what shell is running
 

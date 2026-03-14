@@ -268,7 +268,7 @@ If you can't [connect to your VM](../../wiki/vm.md#connect-to-the-vm), complete 
 
 ### 1.12. (UPD) Set up the `Qwen Code` API (VM)
 
-[Set up the `Qwen Code` API on your VM](../../wiki/qwen.md#set-up-the-qwen-code-api-remote-machine).
+[Set up the `Qwen Code` API on your VM](../../wiki/qwen.md#set-up-the-qwen-code-api-remote).
 
 ### 1.13. Set up the `Autochecker` bot (`Telegram`)
 

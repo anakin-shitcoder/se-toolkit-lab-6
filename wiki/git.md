@@ -173,7 +173,7 @@ git commit -m "docs: update wiki"
 git log --oneline --decorate --graph -n 15
 ```
 
-See [`<file-path>`](./file-system.md#file-path).
+See [`<file-path>`](./file-system.md#file-path-placeholder).
 
 When confused, start with `git status` and read it carefully before running the next command.
 

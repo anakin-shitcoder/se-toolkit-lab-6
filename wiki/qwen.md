@@ -373,7 +373,7 @@ Actions:
 
 ### Refer to a file
 
-Write `@<file-path>` (without `<` and `>`) to refer to the file at the [`<file-path>`](./file-system.md#file-path).
+Write `@<file-path>` (without `<` and `>`) to refer to the file at the [`<file-path>`](./file-system.md#file-path-placeholder).
 
 Example: `@main.py`.
 
