@@ -57,12 +57,14 @@
   - [Change the workspace settings](#change-the-workspace-settings)
 - [Common actions](#common-actions)
   - [Open the directory](#open-the-directory)
+    - [Open the directory using the `Open Folder` command](#open-the-directory-using-the-open-folder-command)
     - [(`Windows` only) Open the directory in `WSL`](#windows-only-open-the-directory-in-wsl)
     - [(`Windows` only) Reopen the directory in `WSL`](#windows-only-reopen-the-directory-in-wsl)
   - [Open the file](#open-the-file)
     - [Open the file using `Quick Open`](#open-the-file-using-quick-open)
-    - [Open the file using `code`](#open-the-file-using-code)
-    - [Open the file using the context menu](#open-the-file-using-the-context-menu)
+  - [Open the file or the directory](#open-the-file-or-the-directory)
+    - [Open the file or the directory using `code`](#open-the-file-or-the-directory-using-code)
+    - [Open the file or the directory using the context menu](#open-the-file-or-the-directory-using-the-context-menu)
   - [Open the `Markdown` preview](#open-the-markdown-preview)
 - [Language server](#language-server)
   - [Type on hover](#type-on-hover)
@@ -614,7 +616,19 @@ Here are some [workspace settings](#workspace-settings) that you can change:
 
 ## Common actions
 
+<!-- no toc -->
+- [Open the directory](#open-the-directory)
+- [Open the file](#open-the-file)
+- [Open the file or the directory](#open-the-file-or-the-directory)
+
 ### Open the directory
+
+- Method 1: [Open the directory using the `Open Folder` command](#open-the-directory-using-the-open-folder-command)
+- Method 2: [Open the directory using `code`](#open-the-file-or-the-directory-using-code)
+- Method 3: [(`Windows` only) Open the directory in `WSL`](#windows-only-open-the-directory-in-wsl)
+- Method 4: [(`Windows` only) Reopen the directory in `WSL`](#windows-only-reopen-the-directory-in-wsl)
+
+#### Open the directory using the `Open Folder` command
 
 > [!NOTE]
 > The `<directory-name>` is the name of a directory (without `<` and `>`) that you want to open.
@@ -623,17 +637,20 @@ Here are some [workspace settings](#workspace-settings) that you can change:
 
 1. [Run using the `Command Palette`](./vs-code.md#command-palette):
    `File: Open Folder...`
+
 2. Find the directory `<directory-name>`.
+
 3. Open this directory.
 
    `VS Code` should now open in that directory.
+
 4. [Open the `Explorer`](./vs-code.md#open-the-vs-code-explorer).
 
    You should see `<DIRECTORY-NAME>` there.
 
    Example: `SOFTWARE-ENGINEERING-TOOLKIT`
-5. (`Windows` only) [Reopen the directory in `WSL`](#windows-only-reopen-the-directory-in-wsl)
-   to use the [file system](./file-system.md#what-is-a-file-system) of [`Linux`](./linux.md#what-is-linux).
+
+5. [(`Windows` only) Reopen the directory in `WSL`](#windows-only-reopen-the-directory-in-wsl).
 
 #### (`Windows` only) Open the directory in `WSL`
 
@@ -648,36 +665,49 @@ Here are some [workspace settings](#workspace-settings) that you can change:
 1. [Run using the `Command Palette`](./vs-code.md#run-a-command-using-the-command-palette):
    `WSL: Reopen Folder in WSL`.
 2. Choose `Ubuntu 24.04`.
-3. If you don't see such an option, [set up running `VS Code` in `WSL`](#windows-only-set-up-running-vs-code-in-wsl)
+3. If you don't see such an option, [set up running `VS Code` in `WSL`](#windows-only-set-up-running-vs-code-in-wsl).
+4. [Check the current shell in the `VS Code Terminal`](#check-the-current-shell-in-the-vs-code-terminal).
 
 ### Open the file
 
 <!-- no toc -->
-- Method 1: [Open the local file using `VS Code Explorer`](#open-the-local-file-using-the-vs-code-explorer)
+- Method 1: [Open the local file using the `VS Code Explorer`](#open-the-local-file-using-the-vs-code-explorer)
 - Method 2: [Open the file using `Quick Open`](#open-the-file-using-quick-open)
-- Method 3: [Open the file using `code`](#open-the-file-using-code)
-- Method 4: [Open the file using a context menu](#open-the-file-using-the-context-menu)
+- Method 3: [Open the file using `code`](#open-the-file-or-the-directory-using-code)
+- Method 4: [Open the file using the context menu](#open-the-file-or-the-directory-using-the-context-menu)
 
 #### Open the file using `Quick Open`
 
-1. Press `Ctrl+P` (`Cmd+P` on `macOS`).
-2. Start typing the name of the file.
-3. [Select](#select-an-option-from-a-list) the file.
+Method 1 (file inside the directory where `VS Code` is opened):
 
-#### Open the file using `code`
+1. [Open the `Quick Open`](#open-the-quick-open).
+2. Start writing the [relative path](./file-system.md#relative-path) of the file.
+   Example: `wiki/`.
+3. [Select the file from the list](#select-an-option-from-a-list).
 
-1. [Open a new `VS Code Terminal`](#open-a-new-vs-code-terminal) if something is running in your current `VS Code Terminal`.
-2. To open a file from the terminal,
+Method 2 (file at the absolute [`<file-path>`](./file-system.md#file-path-placeholder)):
 
-   [run in the `VS Code Terminal`](#run-a-command-in-the-vs-code-terminal):
+1. [Open the `Quick Open`](#open-the-quick-open).
+2. Write the file path
+
+### Open the file or the directory
+
+- Method 1: [Open the file or the directory using `code`](#open-the-file-or-the-directory-using-code)
+- Method 2: [Open the file or the directory using the context menu](#open-the-file-or-the-directory-using-the-context-menu)
+
+#### Open the file or the directory using `code`
+
+1. Open a new terminal (e.g., [open a new `VS Code Terminal`](#open-a-new-vs-code-terminal)).
+
+2. Run in the terminal
 
    ```terminal
-   code <file-path>
+   code <path>
    ```
 
-   See [`<file-path>`](./file-system.md#file-path).
+   See [`<path>`](./file-system.md#file-path).
 
-   **Note:** the file will be created if it doesn't yet exist.
+   **Note:** the file or the directory will be created if it doesn't yet exist.
 
    > <h3>Troubleshooting</h3>
    >
@@ -685,13 +715,16 @@ Here are some [workspace settings](#workspace-settings) that you can change:
    >
    > [Add `VS Code` to `PATH`](#macos-only-add-vs-code-to-path).
 
-#### Open the file using the context menu
+3. [(`Windows` only) Reopen the directory in `WSL`](#windows-only-reopen-the-directory-in-wsl) if you open the directory.
+
+#### Open the file or the directory using the context menu
 
 1. Open any file explorer app installed on your system.
 2. Find the file or the directory in that app.
 3. Right-click the file or the directory.
 4. Find `Open with...` or similar.
 5. Choose `VS Code`.
+6. [(`Windows` only) Reopen the directory in `WSL`](#windows-only-reopen-the-directory-in-wsl) if you open the directory.
 
 ### Open the `Markdown` preview
 
