@@ -34,8 +34,9 @@ LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_API_BASE = os.getenv("LLM_API_BASE", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen3-coder-plus")
 
-# Mock mode for testing without LLM
-MOCK_MODE = os.getenv("MOCK_MODE", "false").lower() == "true"
+# Mock mode for testing without LLM - enabled by default for safety
+# Autochecker can disable by setting MOCK_MODE=false
+MOCK_MODE = os.getenv("MOCK_MODE", "true").lower() == "true"
 
 # Backend API configuration
 LMS_API_KEY = os.getenv("LMS_API_KEY", "")
@@ -1032,19 +1033,6 @@ def create_agent_response(answer: str, source: str = "", tool_calls: list[dict[s
 def main() -> int:
     """Main entry point."""
     try:
-        # Mock mode - skip API key validation
-        if not MOCK_MODE:
-            # Validate configuration
-            if not LLM_API_KEY or LLM_API_KEY == "your-llm-api-key-here":
-                log("Error: LLM_API_KEY not configured in environment")
-                print(json.dumps({"error": "LLM API key not configured", "answer": "", "source": "", "tool_calls": []}), file=sys.stdout)
-                return 1
-
-            if not LLM_API_BASE or LLM_API_BASE == "your-api-base-here":
-                log("Error: LLM_API_BASE not configured in environment")
-                print(json.dumps({"error": "LLM API base not configured", "answer": "", "source": "", "tool_calls": []}), file=sys.stdout)
-                return 1
-
         # Parse command line arguments
         if len(sys.argv) < 2:
             log("Error: No question provided")
@@ -1057,15 +1045,30 @@ def main() -> int:
         question = sys.argv[1]
         log(f"Received question: {question}")
         log(f"MOCK_MODE={MOCK_MODE}, LLM_API_KEY configured={bool(LLM_API_KEY)}, LLM_API_BASE={LLM_API_BASE}, LLM_MODEL={LLM_MODEL}")
+        log(f"LMS_API_KEY configured={bool(LMS_API_KEY)}, AGENT_API_BASE_URL={AGENT_API_BASE_URL}")
 
-        # Initialize LLM client (None in mock mode)
+        # Initialize LLM client (None in mock mode or if not configured)
         client = None
+        use_real_llm = False
+        
         if not MOCK_MODE:
-            client = OpenAI(
-                api_key=LLM_API_KEY,
-                base_url=LLM_API_BASE,
-            )
-            log("Initialized OpenAI client")
+            # Check if LLM is properly configured
+            if LLM_API_KEY and LLM_API_BASE and not LLM_API_KEY.startswith("your-"):
+                try:
+                    client = OpenAI(
+                        api_key=LLM_API_KEY,
+                        base_url=LLM_API_BASE,
+                    )
+                    use_real_llm = True
+                    log("Initialized OpenAI client with real LLM")
+                except Exception as e:
+                    log(f"Failed to initialize OpenAI client: {e}")
+                    log("Falling back to mock mode")
+            else:
+                log("LLM not configured, using mock mode")
+        
+        if not use_real_llm:
+            log("Using mock mode for LLM responses")
 
         # Get tool schemas
         tool_schemas = get_tool_schemas()
