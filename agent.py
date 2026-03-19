@@ -34,9 +34,9 @@ LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_API_BASE = os.getenv("LLM_API_BASE", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen3-coder-plus")
 
-# Mock mode for testing without LLM - enabled by default for safety
-# Autochecker can disable by setting MOCK_MODE=false
-MOCK_MODE = os.getenv("MOCK_MODE", "true").lower() == "true"
+# Mock mode: explicitly set MOCK_MODE=true to use mock responses
+# Default is false - use real LLM if configured
+MOCK_MODE = os.getenv("MOCK_MODE", "false").lower() == "true"
 
 # Backend API configuration
 LMS_API_KEY = os.getenv("LMS_API_KEY", "")
@@ -1047,34 +1047,35 @@ def main() -> int:
         log(f"MOCK_MODE={MOCK_MODE}, LLM_API_KEY configured={bool(LLM_API_KEY)}, LLM_API_BASE={LLM_API_BASE}, LLM_MODEL={LLM_MODEL}")
         log(f"LMS_API_KEY configured={bool(LMS_API_KEY)}, AGENT_API_BASE_URL={AGENT_API_BASE_URL}")
 
-        # Initialize LLM client (None in mock mode or if not configured)
+        # Initialize LLM client
         client = None
-        use_real_llm = False
+        use_mock = MOCK_MODE
         
-        if not MOCK_MODE:
-            # Check if LLM is properly configured
+        # If not explicitly in mock mode, check if LLM is configured
+        if not use_mock:
             if LLM_API_KEY and LLM_API_BASE and not LLM_API_KEY.startswith("your-"):
                 try:
                     client = OpenAI(
                         api_key=LLM_API_KEY,
                         base_url=LLM_API_BASE,
                     )
-                    use_real_llm = True
                     log("Initialized OpenAI client with real LLM")
                 except Exception as e:
                     log(f"Failed to initialize OpenAI client: {e}")
                     log("Falling back to mock mode")
+                    use_mock = True
             else:
                 log("LLM not configured, using mock mode")
+                use_mock = True
         
-        if not use_real_llm:
+        if use_mock:
             log("Using mock mode for LLM responses")
 
         # Get tool schemas
         tool_schemas = get_tool_schemas()
 
         # Run agentic loop
-        result = run_agentic_loop(client, question, tool_schemas)
+        result = run_agentic_loop(client if not use_mock else None, question, tool_schemas)
 
         # Create and output response
         response = create_agent_response(
