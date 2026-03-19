@@ -754,13 +754,14 @@ When answering questions:
 - Call tools one at a time, not all at once
 - When you have enough information, provide a final answer without calling more tools
 
-Respond in the same language as the question."""
+Respond in the same language as the question.
 
 Rules:
 - Respond in the same language as the question
 - Be concise but thorough
 - Use at most 10 tool calls total
-- When citing sources, use format: `path/to/file.md#section-anchor`"""
+- When citing sources, use format: `path/to/file.md#section-anchor`
+"""
 
 def run_agentic_loop(
     client: OpenAI | None,
@@ -873,117 +874,6 @@ def create_agent_response(answer: str, source: str = "", tool_calls: list[dict[s
         response["source"] = source
 
     return response
-
-
-def run_agentic_loop(client: OpenAI, question: str) -> dict[str, Any]:
-    """
-    Run the agentic loop: LLM → tool calls → results → LLM → answer.
-
-    Returns the final response dict.
-    """
-    system_prompt = create_system_prompt()
-
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": question},
-    ]
-
-    all_tool_calls: list[dict[str, Any]] = []
-    iteration = 0
-
-    while iteration < MAX_TOOL_CALLS:
-        iteration += 1
-        log(f"Iteration {iteration}/{MAX_TOOL_CALLS}")
-
-        # Call LLM
-        response = call_llm_with_retry(client, messages, tools=TOOLS)
-
-        content = response["content"]
-        tool_calls = response["tool_calls"]
-
-        # If no tool calls, we have the final answer
-        if not tool_calls:
-            log("No tool calls - final answer received")
-
-            # Extract source from context if available
-            source = extract_source_from_tool_calls(all_tool_calls)
-
-            # If no content but we have tool calls, synthesize an answer
-            if not content.strip() and all_tool_calls:
-                content = "Based on the information gathered, I found the answer."
-
-            return create_agent_response(content, all_tool_calls, source)
-
-        # Execute tool calls
-        log(f"Executing {len(tool_calls)} tool call(s)")
-
-        for tc in tool_calls:
-            tool_name = tc["name"]
-            tool_args = tc["arguments"]
-            tool_id = tc["id"]
-
-            log(f"Tool: {tool_name}, Args: {tool_args}")
-
-            # Execute the tool
-            if tool_name in TOOL_FUNCTIONS:
-                try:
-                    result = TOOL_FUNCTIONS[tool_name](tool_args)
-                except Exception as e:
-                    result = f"Error executing tool: {e}"
-            else:
-                result = f"Error: Unknown tool: {tool_name}"
-
-            log(f"Tool result: {result[:100]}..." if len(result) > 100 else f"Tool result: {result}")
-
-            # Record the tool call for final output
-            all_tool_calls.append(
-                {
-                    "tool": tool_name,
-                    "args": tool_args,
-                    "result": result,
-                }
-            )
-
-            # Append tool response to messages for LLM context
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": tool_id,
-                            "type": "function",
-                            "function": {
-                                "name": tool_name,
-                                "arguments": json.dumps(tool_args),
-                            },
-                        }
-                    ],
-                }
-            )
-            messages.append(
-                {
-                    "role": "tool",
-                    "content": result,
-                    "tool_call_id": tool_id,
-                }
-            )
-
-    # Max iterations reached
-    log("Max tool calls reached")
-
-    # Ask LLM for final answer based on gathered information
-    messages.append(
-        {
-            "role": "system",
-            "content": "You have reached the maximum number of tool calls (10). Provide your best answer based on the information you have gathered.",
-        }
-    )
-
-    response = call_llm_with_retry(client, messages, tools=None)
-    source = extract_source_from_tool_calls(all_tool_calls)
-
-    return create_agent_response(response["content"] or "Unable to complete the task within the tool call limit.", all_tool_calls, source)
 
 
 # =============================================================================
