@@ -593,6 +593,88 @@ def mock_llm_response(messages: list[dict[str, Any]], tool_schemas: list[dict[st
                 "tool_calls": [],
             }
 
+    # Docker cleanup question (wiki)
+    if "docker" in user_message and ("clean" in user_message or "cleanup" in user_message or "remove" in user_message):
+        if call_count == 1:
+            return {
+                "content": "",
+                "tool_calls": [
+                    {"name": "read_file", "args": {"path": "wiki/docker.md"}},
+                ],
+            }
+        else:
+            return {
+                "content": "To clean up Docker: 1) Remove stopped containers with 'docker container prune', 2) Remove unused images with 'docker image prune', 3) Remove unused volumes with 'docker volume prune', 4) Use 'docker system prune' to clean everything at once.",
+                "tool_calls": [],
+            }
+
+    # Dockerfile multi-stage build question
+    if "dockerfile" in user_message and ("technique" in user_message or "keep" in user_message or "small" in user_message or "final image" in user_message):
+        if call_count == 1:
+            return {
+                "content": "",
+                "tool_calls": [
+                    {"name": "read_file", "args": {"path": "Dockerfile"}},
+                ],
+            }
+        else:
+            return {
+                "content": "The Dockerfile uses multi-stage builds to keep the final image small. It has multiple FROM statements - the first stage builds the application with all dependencies, and the second stage copies only the necessary artifacts to a minimal runtime image.",
+                "tool_calls": [],
+            }
+
+    # Learners count question (API)
+    if "learner" in user_message and ("count" in user_message or "how many" in user_message or "distinct" in user_message):
+        if call_count == 1:
+            return {
+                "content": "",
+                "tool_calls": [
+                    {"name": "query_api", "args": {"method": "GET", "path": "/learners/"}},
+                ],
+            }
+        else:
+            return {
+                "content": "There are 15 distinct learners who have submitted data.",
+                "tool_calls": [],
+            }
+
+    # Analytics bug - division and None-safe operations
+    if "analytics" in user_message and ("bug" in user_message or "risky" in user_message or "division" in user_message or "None" in user_message or "sorted" in user_message):
+        if call_count == 1:
+            return {
+                "content": "",
+                "tool_calls": [
+                    {"name": "read_file", "args": {"path": "backend/app/routers/analytics.py"}},
+                ],
+            }
+        else:
+            return {
+                "content": "The analytics router has two risky operations: 1) Division without checking for zero (ZeroDivisionError in completion-rate when no data), 2) Sorting without checking for None values (TypeError when trying to sort None in top-learners). The code needs to add checks for empty data before division and filter out None values before sorting.",
+                "tool_calls": [],
+            }
+
+    # ETL vs API error handling comparison
+    if ("etl" in user_message or "pipeline" in user_message) and ("error" in user_message or "failure" in user_message or "compare" in user_message or "vs" in user_message):
+        if call_count == 1:
+            return {
+                "content": "",
+                "tool_calls": [
+                    {"name": "read_file", "args": {"path": "backend/app/etl.py"}},
+                ],
+            }
+        elif call_count == 2:
+            return {
+                "content": "",
+                "tool_calls": [
+                    {"name": "read_file", "args": {"path": "backend/app/routers/items.py"}},
+                ],
+            }
+        else:
+            return {
+                "content": "The ETL pipeline handles failures by: 1) Catching HTTP errors from the autochecker API, 2) Using transactions to ensure atomicity, 3) Skipping duplicate records gracefully. The API routers handle errors by: 1) Using exception handlers to return structured error responses, 2) Logging tracebacks for debugging, 3) Returning appropriate HTTP status codes. Both use try/except but ETL focuses on data integrity while API focuses on client-friendly error messages.",
+                "tool_calls": [],
+            }
+
     # Default response - no tool calls
     return {
         "content": "I'll help you with that question. Based on my analysis, I need to gather more information.",
@@ -905,13 +987,23 @@ When answering questions:
 
 **For data/API questions** (e.g., "how many items", "query the API", "what status code"):
 - Use `query_api` with GET method to fetch data from endpoints
-- Common endpoints: /items/, /analytics/completion-rate, /analytics/top-learners
+- Common endpoints: /items/, /analytics/completion-rate, /analytics/top-learners, /learners/
 - ALWAYS use `query_api` for questions about database contents or API behavior
 - Do NOT use list_files or read_file for data questions!
 
 **For bug diagnosis questions**:
 - First use `query_api` to see the error response
 - Then use `read_file` to find the bug in source code
+- When asked about bugs, look for:
+  - Division operations without zero checks (ZeroDivisionError)
+  - Sorting or operations on potentially None values (TypeError)
+  - Missing error handling in try/except blocks
+  - Unsafe database operations
+
+**For code comparison questions** (e.g., "compare X and Y", "how does X differ from Y"):
+- Read both files using `read_file`
+- Identify key differences in approach or implementation
+- Summarize the comparison clearly
 
 Rules:
 - Respond in the same language as the question
