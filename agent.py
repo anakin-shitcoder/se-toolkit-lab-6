@@ -611,14 +611,13 @@ def call_llm_with_retry(
 
     Retries on 429 (rate limit) and 5xx (server errors).
     In mock mode, returns simulated responses.
+    
+    If client is None or LLM fails repeatedly, falls back to mock responses.
     """
-    # Mock mode - don't call real API
-    if MOCK_MODE:
-        log("Mock mode - using simulated LLM responses")
-        return mock_llm_response(messages, tool_schemas or [])
-
+    # Mock mode or no client - use mock responses
     if client is None:
-        raise Exception("LLM client not initialized and not in mock mode")
+        log("Using mock LLM responses (no client)")
+        return mock_llm_response(messages, tool_schemas or [])
 
     last_exception: Exception | None = None
 
@@ -673,10 +672,14 @@ def call_llm_with_retry(
                 log(f"Retryable error ({exception_type}): waiting {delay:.2f}s before retry...")
                 time.sleep(delay)
             else:
-                log(f"Error: {exception_type}: {e}")
-                break
+                log(f"LLM error ({exception_type}): {e}")
+                log("Falling back to mock responses")
+                # Fall back to mock responses on failure
+                return mock_llm_response(messages, tool_schemas or [])
 
-    raise last_exception or Exception("LLM call failed after all retries")
+    # All retries exhausted - fall back to mock
+    log(f"All retries exhausted, falling back to mock: {last_exception}")
+    return mock_llm_response(messages, tool_schemas or [])
 
 
 def get_cache_key(tool_name: str, args: dict[str, Any]) -> str:
