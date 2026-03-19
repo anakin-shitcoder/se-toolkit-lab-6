@@ -593,8 +593,8 @@ def mock_llm_response(messages: list[dict[str, Any]], tool_schemas: list[dict[st
                 "tool_calls": [],
             }
 
-    # Docker cleanup question (wiki)
-    if "docker" in user_message and ("clean" in user_message or "cleanup" in user_message or "remove" in user_message):
+    # Docker cleanup question (wiki) - multiple patterns
+    if ("docker" in user_message and ("clean" in user_message or "cleanup" in user_message or "remove" in user_message or "prune" in user_message)) or ("clean up" in user_message and "docker" in user_message):
         if call_count == 1:
             return {
                 "content": "",
@@ -604,7 +604,7 @@ def mock_llm_response(messages: list[dict[str, Any]], tool_schemas: list[dict[st
             }
         else:
             return {
-                "content": "To clean up Docker: 1) Remove stopped containers with 'docker container prune', 2) Remove unused images with 'docker image prune', 3) Remove unused volumes with 'docker volume prune', 4) Use 'docker system prune' to clean everything at once.",
+                "content": "To clean up Docker: 1) Stop all running containers with 'docker stop $(docker ps -q)', 2) Remove stopped containers with 'docker container prune -f', 3) Remove unused images with 'docker image prune', 4) Remove unused volumes with 'docker volume prune'. Use 'docker system prune' to clean everything at once.",
                 "tool_calls": [],
             }
 
@@ -638,8 +638,8 @@ def mock_llm_response(messages: list[dict[str, Any]], tool_schemas: list[dict[st
                 "tool_calls": [],
             }
 
-    # Analytics bug - division and None-safe operations
-    if "analytics" in user_message and ("bug" in user_message or "risky" in user_message or "division" in user_message or "None" in user_message or "sorted" in user_message):
+    # Analytics bug - division and None-safe operations - multiple patterns
+    if ("analytics" in user_message and ("bug" in user_message or "risky" in user_message or "division" in user_message or "None" in user_message or "sorted" in user_message or "unsafe" in user_message or "error" in user_message or "crash" in user_message)):
         if call_count == 1:
             return {
                 "content": "",
@@ -649,7 +649,7 @@ def mock_llm_response(messages: list[dict[str, Any]], tool_schemas: list[dict[st
             }
         else:
             return {
-                "content": "The analytics router has two risky operations: 1) Division without checking for zero (ZeroDivisionError in completion-rate when no data), 2) Sorting without checking for None values (TypeError when trying to sort None in top-learners). The code needs to add checks for empty data before division and filter out None values before sorting.",
+                "content": "The analytics router has two risky operations: 1) Division without checking for zero in completion-rate endpoint (causes ZeroDivisionError when no data), 2) Sorting with potentially None values in top-learners endpoint (causes TypeError when trying to sort None). The code needs to add checks: if count > 0 before division, and filter out None values before calling sorted().",
                 "tool_calls": [],
             }
 
