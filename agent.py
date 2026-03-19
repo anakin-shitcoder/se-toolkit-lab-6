@@ -889,26 +889,37 @@ def create_system_prompt() -> str:
 
 You have access to three tools:
 1. `read_file` - Read the contents of a file from the project repository
-2. `list_files` - List files and directories at a given path
+2. `list_files` - List files and directories at a given path  
 3. `query_api` - Query the backend API to get data or test endpoints
 
 When answering questions:
-- Use `list_files` to discover what files exist in a directory
-- Use `read_file` to read documentation, source code, or configuration files
-- Use `query_api` to query the running backend system for data or to test API behavior
-- Think step by step: first discover what files might contain the answer, then read them
-- For wiki/documentation questions, always include a source reference (file path and section if possible)
-- For system/API questions, use `query_api` to get real data from the running system
-- Call tools one at a time, not all at once
-- When you have enough information, provide a final answer without calling more tools
 
-Respond in the same language as the question.
+**For wiki/documentation questions** (e.g., "according to the wiki", "what steps", "how to"):
+- Use `list_files` to find relevant documentation files
+- Use `read_file` to read the content
+- Include source reference in your answer
+
+**For source code questions** (e.g., "what framework", "read the source code"):
+- Use `list_files` to find the backend structure
+- Use `read_file` to read specific files like main.py, routers, etc.
+
+**For data/API questions** (e.g., "how many items", "query the API", "what status code"):
+- Use `query_api` with GET method to fetch data from endpoints
+- Common endpoints: /items/, /analytics/completion-rate, /analytics/top-learners
+- ALWAYS use `query_api` for questions about database contents or API behavior
+- Do NOT use list_files or read_file for data questions!
+
+**For bug diagnosis questions**:
+- First use `query_api` to see the error response
+- Then use `read_file` to find the bug in source code
 
 Rules:
 - Respond in the same language as the question
 - Be concise but thorough
 - Use at most 10 tool calls total
+- Call tools one at a time, not all at once
 - When citing sources, use format: `path/to/file.md#section-anchor`
+- When you have enough information, provide a final answer without calling more tools
 """
 
 def run_agentic_loop(
